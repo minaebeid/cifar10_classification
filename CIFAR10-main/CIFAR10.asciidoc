@@ -1,0 +1,228 @@
++*In[3]:*+
+[source, ipython3]
+----
+# Main file
+from tensorflow.keras import datasets, layers, models
+from tensorflow.keras.optimizers import Adam
+from keras.callbacks import CSVLogger, ModelCheckpoint
+from keras.models import load_model
+from keras.models import Model
+from keras.layers import Input, Conv1D, Dense, Flatten, Activation, BatchNormalization
+import tensorflow as tf
+import tensorflow as tf
+import matplotlib.pyplot as plt
+import numpy as np
+import pickle
+
+from pathlib import Path
+
+###================================================================================================
+### We are using model in the model_0.py file. Change this to load other models.
+def model(input_shape):
+    input = Input(input_shape)
+    X = Flatten()(input)
+    X = Dense(units=64, activation='relu')(X)
+    X = Dense(units=10, activation='softmax')(X)
+
+    model = Model(inputs=input, outputs=X)
+    return model
+
+###================================================================================================
+# Specify model name to save model as. eg., "model_0", "model_1", "model_2"
+MODEL_NAME = 'model_0'
+
+###================================================================================================
+### Plotting function
+def set_size(w,h, ax=None):
+    """ w, h: width, height in inches """
+    if not ax: ax=plt.gca()
+    l = ax.figure.subplotpars.left
+    r = ax.figure.subplotpars.right
+    t = ax.figure.subplotpars.top
+    b = ax.figure.subplotpars.bottom
+    figw = float(w)/(r-l)
+    figh = float(h)/(t-b)
+    ax.figure.set_size_inches(figw, figh)
+
+def plot_Acc_And_Loss2(history_dict, save=True):
+    """
+    Plots loss and accuracy of train and val data over epochs.
+    :return:
+    """
+    fig, axs = plt.subplots(1, 2)
+    axs[0].plot(history_dict['accuracy'])
+    axs[0].plot(history_dict['val_accuracy'])
+    axs[0].set_title('training vs validation accuracy')
+    axs[0].set_ylabel('accuracy')
+    axs[0].set_xlabel('epoch')
+    axs[0].legend(['train', 'val'], loc='upper left')
+    axs[0].grid(True)
+
+    axs[1].plot(history_dict['loss'])
+    axs[1].plot(history_dict['val_loss'])
+    axs[1].set_title('training vs validation loss')
+    axs[1].set_ylabel('loss')
+    axs[1].set_xlabel('epoch')
+    axs[1].legend(['train', 'val'], loc='upper left')
+    axs[1].grid(True)
+    set_size(8,4)
+    if save: plt.savefig('model_logs/'+MODEL_NAME+'_logs/'+MODEL_NAME+"_loss.png")
+    plt.show()
+
+
+###================================================================================================
+BATCH_SIZE = 32
+EPOCHS = 10
+
+### CIFAR10 dataset loading:
+### Partition data - data is already partioned from unpacking here:
+(x_train, y_train), (x_test, y_test) = datasets.cifar10.load_data()
+input_shape = (32,32,3) # get 1st sample's shape.
+
+# Check shape of each partition. Each img is 32x32x3. 50000 in training set, 10000 in test set.
+print("x_train shape = " + str(np.shape(x_train)))
+print("y_train shape = " + str(np.shape(y_train)))
+print("x_test shape = " + str(np.shape(x_test)))
+print("y_test shape = " + str(np.shape(y_test)))
+
+
+###================================================================================================
+### Compile a model.
+model = model(input_shape)
+opt = Adam(learning_rate=.0001)
+loss = tf.keras.losses.SparseCategoricalCrossentropy()
+metrics=['accuracy']
+model.compile(optimizer=opt, loss=loss, metrics=metrics)
+model.summary()
+
+
+###================================================================================================
+### Train and Predict.
+model_checkpoint = ModelCheckpoint(filepath='model/'+MODEL_NAME,
+                                       verbose=1,
+                                       monitor='val_loss',
+                                       save_best_only=True)
+Path('model_logs/'+MODEL_NAME+'_logs/').mkdir(parents=True)
+csv_logger = CSVLogger(filename='model_logs/'+MODEL_NAME+'_logs/'+MODEL_NAME+'_log.csv', separator=',', append=True)
+# t0 = len(x_train)//BATCH_SIZE
+model_history = model.fit(x=x_train, y=y_train, epochs=EPOCHS, callbacks=[csv_logger, model_checkpoint], validation_data=(x_test, y_test))
+
+
+###================================================================================================
+"""Save model history and plot loss and acc"""
+"""
+Note!!! If these files already exist, will get an error. 
+"""
+with open('model/'+MODEL_NAME+'/trainHistoryDict', 'wb') as file_name:
+    pickle.dump(model_history.history, file_name)       # Save history dict
+plot_Acc_And_Loss2(model_history.history)        # Plot acc and loss over epochs
+with open('model_logs/'+MODEL_NAME+'_logs/'+MODEL_NAME+'_summary', 'w') as fh:
+    # Pass the file handle in as a lambda function to make it callable
+    model.summary(print_fn=lambda x: fh.write(x + '\n'))
+
+
+###================================================================================================
+### Evaluate model.
+print("\nEvaluating model...\n")
+test_loss, test_acc = model.evaluate(x_test,  y_test, verbose=2)
+
+pred_outs = model.predict(x_test)
+
+pred_labels = np.argmax(pred_outs,axis=1)
+
+
+# t0model = load_model("model/model_0") # Load a saved model from "model/..." and evaluate.
+# t0predict = t0model.evaluate(x_test,  y_test, verbose=2)
+----
+
+
++*Out[3]:*+
+----
+x_train shape = (50000, 32, 32, 3)
+y_train shape = (50000, 1)
+x_test shape = (10000, 32, 32, 3)
+y_test shape = (10000, 1)
+Model: "functional_1"
+_________________________________________________________________
+Layer (type)                 Output Shape              Param #   
+=================================================================
+input_1 (InputLayer)         [(None, 32, 32, 3)]       0         
+_________________________________________________________________
+flatten (Flatten)            (None, 3072)              0         
+_________________________________________________________________
+dense (Dense)                (None, 64)                196672    
+_________________________________________________________________
+dense_1 (Dense)              (None, 10)                650       
+=================================================================
+Total params: 197,322
+Trainable params: 197,322
+Non-trainable params: 0
+_________________________________________________________________
+Epoch 1/10
+1546/1563 [============================>.] - ETA: 0s - loss: 6.9519 - accuracy: 0.1053
+Epoch 00001: val_loss improved from inf to 2.32009, saving model to model\model_0
+WARNING:tensorflow:From D:\Users\orion\anaconda3\envs\tensorflow\lib\site-packages\tensorflow\python\training\tracking\tracking.py:111: Model.state_updates (from tensorflow.python.keras.engine.training) is deprecated and will be removed in a future version.
+Instructions for updating:
+This property should not be used in TensorFlow 2.0, as updates are applied automatically.
+WARNING:tensorflow:From D:\Users\orion\anaconda3\envs\tensorflow\lib\site-packages\tensorflow\python\training\tracking\tracking.py:111: Layer.updates (from tensorflow.python.keras.engine.base_layer) is deprecated and will be removed in a future version.
+Instructions for updating:
+This property should not be used in TensorFlow 2.0, as updates are applied automatically.
+INFO:tensorflow:Assets written to: model\model_0\assets
+1563/1563 [==============================] - 4s 2ms/step - loss: 6.9038 - accuracy: 0.1053 - val_loss: 2.3201 - val_accuracy: 0.0995
+Epoch 2/10
+1532/1563 [============================>.] - ETA: 0s - loss: 2.3094 - accuracy: 0.0987
+Epoch 00002: val_loss improved from 2.32009 to 2.31010, saving model to model\model_0
+INFO:tensorflow:Assets written to: model\model_0\assets
+1563/1563 [==============================] - 3s 2ms/step - loss: 2.3093 - accuracy: 0.0986 - val_loss: 2.3101 - val_accuracy: 0.0997
+Epoch 3/10
+1536/1563 [============================>.] - ETA: 0s - loss: 2.3031 - accuracy: 0.0988
+Epoch 00003: val_loss improved from 2.31010 to 2.30817, saving model to model\model_0
+INFO:tensorflow:Assets written to: model\model_0\assets
+1563/1563 [==============================] - 3s 2ms/step - loss: 2.3031 - accuracy: 0.0985 - val_loss: 2.3082 - val_accuracy: 0.0999
+Epoch 4/10
+1552/1563 [============================>.] - ETA: 0s - loss: 2.3025 - accuracy: 0.0995
+Epoch 00004: val_loss improved from 2.30817 to 2.30768, saving model to model\model_0
+INFO:tensorflow:Assets written to: model\model_0\assets
+1563/1563 [==============================] - 3s 2ms/step - loss: 2.3025 - accuracy: 0.0994 - val_loss: 2.3077 - val_accuracy: 0.0998
+Epoch 5/10
+1549/1563 [============================>.] - ETA: 0s - loss: 2.3031 - accuracy: 0.0994
+Epoch 00005: val_loss improved from 2.30768 to 2.30615, saving model to model\model_0
+INFO:tensorflow:Assets written to: model\model_0\assets
+1563/1563 [==============================] - 3s 2ms/step - loss: 2.3031 - accuracy: 0.0994 - val_loss: 2.3061 - val_accuracy: 0.1000
+Epoch 6/10
+1551/1563 [============================>.] - ETA: 0s - loss: 2.3025 - accuracy: 0.0968
+Epoch 00006: val_loss did not improve from 2.30615
+1563/1563 [==============================] - 2s 1ms/step - loss: 2.3025 - accuracy: 0.0968 - val_loss: 2.3063 - val_accuracy: 0.1000
+Epoch 7/10
+1546/1563 [============================>.] - ETA: 0s - loss: 2.3024 - accuracy: 0.0977
+Epoch 00007: val_loss improved from 2.30615 to 2.30563, saving model to model\model_0
+INFO:tensorflow:Assets written to: model\model_0\assets
+1563/1563 [==============================] - 3s 2ms/step - loss: 2.3024 - accuracy: 0.0979 - val_loss: 2.3056 - val_accuracy: 0.1000
+Epoch 8/10
+1536/1563 [============================>.] - ETA: 0s - loss: 2.3023 - accuracy: 0.1002
+Epoch 00008: val_loss did not improve from 2.30563
+1563/1563 [==============================] - 2s 1ms/step - loss: 2.3023 - accuracy: 0.1001 - val_loss: 2.3059 - val_accuracy: 0.1001
+Epoch 9/10
+1555/1563 [============================>.] - ETA: 0s - loss: 2.3024 - accuracy: 0.0989
+Epoch 00009: val_loss did not improve from 2.30563
+1563/1563 [==============================] - 2s 1ms/step - loss: 2.3024 - accuracy: 0.0987 - val_loss: 2.3064 - val_accuracy: 0.1000
+Epoch 10/10
+1559/1563 [============================>.] - ETA: 0s - loss: 2.3024 - accuracy: 0.0980
+Epoch 00010: val_loss improved from 2.30563 to 2.30384, saving model to model\model_0
+INFO:tensorflow:Assets written to: model\model_0\assets
+1563/1563 [==============================] - 3s 2ms/step - loss: 2.3024 - accuracy: 0.0980 - val_loss: 2.3038 - val_accuracy: 0.0999
+
+![png](output_0_1.png)
+
+
+Evaluating model...
+
+313/313 - 0s - loss: 2.3038 - accuracy: 0.0999
+----
+
+
++*In[ ]:*+
+[source, ipython3]
+----
+
+----
